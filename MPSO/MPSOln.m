@@ -6,52 +6,36 @@
 %   Dhananjay Bhaskar
 %   Memetic Particle Swarm Optimization, Y. G. Petalas, et al. 
 %
-% Last modified:
-%   Sunday, April 17, 2016
+% Created:
+%   Monday, May 20, 2013
 %
 
-function [optimum, gbest, fev, tElapsed] = MPSO(func_name,xmin,xmax,true_min,errgoal,cutoff_length,seed,c1,c2,rad,lbd,tmax)
+function [opt, res, fev, seed] = MPSOln(N, lbd, eps, tmax, freq, xmin, xmax, scheme, f_handle, dim, err, fopt, seed)
 
-	addpath('./function-definitions');
-
-    % global params
-    N = 60;
-    dim = 5;
-    fun = str2func(func_name);
-    
-    % local search params
-    freq = 10;
-    epsilon = 0.1;
-    scheme = 2;
-    lambda = lbd;
-    
-    % social params 
-    kappa = 1;
-    phi = c1 + c2;
-    cf = 2*kappa;
-    cf = cf/abs(2 - phi - sqrt(phi^2 - 4*phi));
+    % params
+    cf = 0.729;
+    c1 = 2.05;
+    c2 = 2.05;
+    rad = 5;
+    ngenerations = 10000;
     
     % initialization
-    tStart = tic;
-    
-    rand('twister',seed);
-    %s = RandStream('mt19937ar','Seed',seed);
-    %RandStream.setGlobalStream(s);
-    
     t = 0;
     fev = 0;
    
-    x = xmin + (xmax - xmin).*rand(N,dim);    % initialize position
-    v = xmin + (xmax - xmin).*rand(N,dim);    % initialize velocity
-   
-    pbest = x;                                % initialize best position 
+    [mat, seed] = rand_matrix(N, dim, seed);
+    x = xmin + (xmax - xmin).*mat;    % initialize position
+    [mat, seed] = rand_matrix(N, dim, seed);
+    v = xmin + (xmax - xmin).*mat;    % initialize velocity
+    
+    pbest = x;                        % initialize best position 
     lbest = x;
     
     % initialize global best
     
     f_values = zeros(N,1);
     for i = 1 : N
-        f_values(i,1) = feval(fun, x(i,:));
+        f_values(i,1) = f_handle(x(i,:));
     end
     fev = fev + N;
     
@@ -80,34 +64,32 @@ function [optimum, gbest, fev, tElapsed] = MPSO(func_name,xmin,xmax,true_min,err
     [gbest_value, index] = min(f_values(:,1));
     gbest = x(index,:);                                             
     
-    while (fev < cutoff_length && abs(gbest_value - true_min) > errgoal)
+    while (t < ngenerations && abs(gbest_value - fopt) > err)
         
             % update
             t = t + 1;
             
             for i = 1 : N
-                v(i,:) = cf.*(v(i,:) + c1.*rand(1,dim).*(pbest(i,:) - x(i,:)) + c2.*rand(1,dim).*(lbest(i,:) - x(i,:)));
+                [m1, seed] = rand_matrix(1, dim, seed);
+                [m2, seed] = rand_matrix(1, dim, seed);
+                v(i,:) = cf.*(v(i,:) + c1.*m1.*(pbest(i,:) - x(i,:)) + c2.*m2.*(lbest(i,:) - x(i,:)));
                 x(i,:) = x(i,:) + v(i,:);
             end
             
             % constrain x
             for i = 1 : N
                 for j = 1 : dim
-                	if (x(i,j) < xmin)
-                		x(i,j) = xmin;
-                	elseif (x(i,j) > xmax)
-                		x(i,j) = xmax;
-                	end 
-					% random redistribution                
-                    %	if ((x(i,j) < xmin) || (x(i,j) > xmax))
-                    %	    x(i,j) = xmin + (xmax - xmin)*rand(1,1);
-                    %	end
+                    if ((x(i,j) < xmin))
+                        x(i,j) = xmin;
+                    elseif ((x(i,j) > xmax))
+                        x(i,j) = xmax;
+                    end
                 end
             end
             
             % update individual best positions
             for i = 1 : N
-                f_values(i,1) = feval(fun, x(i,:));
+                f_values(i,1) = f_handle(x(i,:));
             end
             fev = fev + N;
             
@@ -149,23 +131,28 @@ function [optimum, gbest, fev, tElapsed] = MPSO(func_name,xmin,xmax,true_min,err
             % local search (Schemes 1 and 2)
             if (mod(t,freq) == 0)
             
-            	% perform local search on overall global best position
-		        [y, y_value] = RWDE(fun, dim, lambda, tmax, gbest, gbest_value);
-		        fev = fev + tmax;
-		        if (y_value < gbest_value)
-		            gbest = y;
-		            gbest_value = y_value;
-		        end
+                if (scheme == 1)
+                    
+                    % local search on overall global best position
+                    [y, y_value, seed] = RWDE(f_handle, dim, lbd, tmax, gbest, gbest_value, seed);
+                    fev = fev + tmax;
+                    if (y_value < gbest_value)
+                        gbest = y;
+                        gbest_value = y_value;
+                    end
+                    
+                end
 
                 if (scheme == 2)
                     
-                    selection = rand(N,1) - epsilon;
+                    [random_selection, seed] = rand_matrix(N, 1, seed);
+                    selection = random_selection - eps;
                     index = find(selection < 0);
                     for i = 1 : numel(index)
                         % perform local search on pbest(index(i), :)
-                        [y, y_value] = RWDE(fun, dim, lambda, tmax, pbest(index(i), :), pbest_values(index(i), 1));
+                        [y, y_value, seed] = RWDE(f_handle, dim, lbd, tmax, pbest(index(i), :), pbest_values(index(i), 1), seed);
                         fev = fev + tmax;
-                        if (y_value < feval(fun, pbest(index(i), :)))
+                        if (y_value < f_handle(pbest(index(i), :)))
                             pbest(index(i), :) = y;
                             pbest_values(index(i), 1) = y_value;
                         end
@@ -177,14 +164,14 @@ function [optimum, gbest, fev, tElapsed] = MPSO(func_name,xmin,xmax,true_min,err
             
     end
     
-    optimum = gbest_value;
-    tElapsed = toc(tStart);
+    opt = gbest_value;
+    res = gbest;
     
 end
 
 
 % Random walk with direct exploitation (local search)
-function [y, y_value] = RWDE(fun, dim, lambda, tmax, x, x_value)
+function [y, y_value, seed] = RWDE(f_handle, dim, lambda, tmax, x, x_value, seed)
 
     t = 0;
     lambdainit = lambda;
@@ -194,10 +181,10 @@ function [y, y_value] = RWDE(fun, dim, lambda, tmax, x, x_value)
         
        t = t + 1;
        % generate unit vector
-       z = rand(1, dim);
-       z = z ./ norm(z,2);
+       [randn_matrix, seed] = generate_random_matrix(1, dim, seed);
+       z = randn_matrix ./ norm(randn_matrix, 2);
        
-       Fnew = feval(fun, x + lambda.*z);
+       Fnew = f_handle(x + lambda.*z);
        
        if (Fnew < F)
            x = x + lambda.*z;
@@ -211,4 +198,19 @@ function [y, y_value] = RWDE(fun, dim, lambda, tmax, x, x_value)
     end
     y = x;
     y_value = F;
+end
+
+
+% Create random uniform matrix (similar to rand built-in function)
+function [mat, seed] = rand_matrix(nrows, ncols, seed)
+    
+    mat = zeros(nrows, ncols);
+    
+    for row = 1 : nrows
+        for col = 1 : ncols
+            [value, seed] = r4_uni(seed);
+            mat(row, col) = value;
+        end
+    end
+
 end
