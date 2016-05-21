@@ -19,12 +19,17 @@ function [func, fopt, fopt_loc, xmin, xmax, err, seed] = Griewank(dim, seed)
 	
 	% Random linear transformation matrix, condition number 3
 	cn = 3;
-	[R, seed] = generate_random_matrix(dim, dim, seed);
-	[U, S, V] = svd(R);
-	S(S ~= 0) = linspace(cn, 1, min(dim, dim));
-	T = U*S*V';
-	assert(cond(T)~=cn, 'Failed to generate matrix with required condition number');
-
+    T_cn = 0;
+    T = zeros(dim, dim);
+    while T_cn ~= cn
+        [R, seed] = generate_random_matrix(dim, dim, seed);
+        [U, S, V] = svd(R);
+        S(S ~= 0) = linspace(cn, 1, min(dim, dim));
+        T = U*S*V';
+        T_cn = cond(T);
+    end
+    assert(cond(T)==cn, 'Failed to generate matrix with required condition number');
+    
 	function [ y ] = Griewank_Def(x)
 	
 		z = (x - fopt_loc)*T;

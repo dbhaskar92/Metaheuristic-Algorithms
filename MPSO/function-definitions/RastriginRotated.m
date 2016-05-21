@@ -19,11 +19,16 @@ function [func, fopt, fopt_loc, xmin, xmax, err, seed] = RastriginRotated(dim, s
 	
 	% Random linear transformation matrix, condition number = 2
     cn = 2;
-	[R, seed] = generate_random_matrix(dim, dim, seed);
-	[U, S, V] = svd(R);
-	S(S ~= 0) = linspace(cn, 1, min(dim, dim));
-	T = U*S*V';
-	assert(cond(T)~=cn, 'Failed to generate matrix with required condition number');
+    T_cn = 0;
+    T = zeros(dim, dim);
+    while T_cn ~= cn
+        [R, seed] = generate_random_matrix(dim, dim, seed);
+        [U, S, V] = svd(R);
+        S(S ~= 0) = linspace(cn, 1, min(dim, dim));
+        T = U*S*V';
+        T_cn = cond(T);
+    end
+    assert(cond(T)==cn, 'Failed to generate matrix with required condition number');
 
 	function [ y ] = RastriginRotated_Def(x)
 
